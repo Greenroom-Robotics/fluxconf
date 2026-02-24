@@ -19,11 +19,9 @@ or with [uv](https://docs.astral.sh/uv/):
 uv add fluxconf
 ```
 
-## Usage
+## Quick start
 
-### ConfigIO
-
-`ConfigIO` is a generic base class for reading and writing YAML-backed Pydantic models. Subclass it, set `file_name` and `config_type`, and you get type-safe read/write with automatic migration support.
+`ConfigIO` is a generic base class for reading and writing YAML-backed Pydantic models. Subclass it, set `file_name` and `config_type`, and you get type-safe read/write out of the box.
 
 ```python
 from pydantic import BaseModel
@@ -37,72 +35,125 @@ class AppConfigIO(ConfigIO[AppConfig]):
     file_name = "app.yml"
     config_type = AppConfig
 
-# Write
 io = AppConfigIO("~/.config/my-app")
 io.write(AppConfig(name="my-app", debug=True))
-
-# Read
-config = io.read()
+config = io.read()  # AppConfig(name='my-app', debug=True)
 ```
 
-### Migrations
+## Migrations
 
-Define migration functions keyed by the integer version they migrate **to**. Migrations run automatically on `read()` when the stored version is behind the latest known migration.
+Migrations transform stored configuration data when your schema evolves. Instead of breaking existing config files, you define migration steps that update old data to match the new schema.
 
-Inherit from `VersionedBaseModel` instead of Pydantic's `BaseModel` so that the `version` field is preserved when the config is written back to disk via `write()`:
+To use migrations, inherit from `VersionedBaseModel` instead of Pydantic's `BaseModel`. This adds a `version` field that tracks which migrations have been applied.
+
+Migration keys follow the `"N_description"` format — the integer prefix determines execution order and is stored as the `version` in the config file. On `read()`, any pending migrations run automatically and the file is updated on disk.
+
+### JSON Patch migrations
+
+The simplest approach: declare [JSON Patch (RFC 6902)](https://datatracker.ietf.org/doc/html/rfc6902) operations directly. No Python functions needed.
 
 ```python
 from fluxconf import ConfigIO, VersionedBaseModel
 
-class AppConfig(VersionedBaseModel):
-    name: str = "my-app"
-    debug: bool = False
+class ServerConfig(VersionedBaseModel):
+    host: str = "localhost"
+    port: int = 8080
 
-def migrate_to_v2(data: dict) -> dict:
-    """Rename 'use_foo' → 'foo_enabled'."""
-    if "use_foo" in data:
-        data["foo_enabled"] = data.pop("use_foo")
-    return data
-
-class AppConfigIO(ConfigIO[AppConfig]):
-    file_name = "app.yml"
-    config_type = AppConfig
+class ServerConfigIO(ConfigIO[ServerConfig]):
+    file_name = "server.yml"
+    config_type = ServerConfig
     migrations = {
-        "2_rename_foo": migrate_to_v2,
+        "1_rename_host": [
+            {"op": "move", "from": "/hostname", "path": "/host"},
+        ],
+        "2_add_port": [
+            {"op": "add", "path": "/port", "value": 8080},
+        ],
     }
 ```
 
-Migration keys are strings of the form `"N_description"` — the integer prefix determines ordering and is stored in the config file as `version`.
+Supported operations: `add`, `remove`, `replace`, `move`, `copy`, and `test`.
 
-On `read()`, pending migrations are applied in version order, the result is written back to disk, and the parsed model is returned.
+### Python function migrations
 
-If a migration fails, `MigrationError` is raised with `last_successful_migration` (an `int`). If the stored version is **ahead** of all known migrations, a `ValueError` is raised immediately.
+When you need conditional logic or complex transforms, use a Python function. Each function receives the raw config dict and must return the updated dict.
 
-#### Directory-based migrations
+```python
+from fluxconf import ConfigIO, VersionedBaseModel
 
-For larger migration sets, point `migrations_dir` at a directory of individual `N_description.py` files instead of (or in addition to) the inline `migrations` dict:
+class UserConfig(VersionedBaseModel):
+    full_name: str = ""
+    email: str = ""
+
+def merge_name_fields(data: dict) -> dict:
+    first = data.pop("first_name", "")
+    last = data.pop("last_name", "")
+    if first or last:
+        data["full_name"] = f"{first} {last}".strip()
+    return data
+
+class UserConfigIO(ConfigIO[UserConfig]):
+    file_name = "user.yml"
+    config_type = UserConfig
+    migrations = {
+        "1_merge_name": merge_name_fields,
+    }
+```
+
+Python functions and JSON Patches can be mixed freely in the same `migrations` dict.
+
+### Directory-based migrations
+
+For projects with many migrations, store each one as a separate file in a directory instead of inlining them all in the class definition.
 
 ```
 myapp/migrations/
-    1_rename_foo.py
-    2_add_bar.py
-    _helpers.py          # skipped (starts with _)
+    1_rename_host.json
+    2_merge_name.py
+    3_add_defaults.py
+    _helpers.py           # skipped (starts with _)
 ```
 
-Each file must define a top-level `migrate(data: dict) -> dict` function:
+Only files with an integer prefix are loaded. Files starting with `_` or without an integer prefix are silently skipped, so helper modules can live alongside migration files.
 
+**`.json` files** contain a JSON array of patch operations:
+
+`myapp/migrations/1_rename_host.json`
+```json
+[
+    {"op": "move", "from": "/hostname", "path": "/host"}
+]
+```
+
+**`.py` files with a `patch` attribute** are equivalent to `.json` files but written in Python:
+
+`myapp/migrations/3_add_defaults.py`
 ```python
-# myapp/migrations/1_rename_foo.py
+patch = [
+    {"op": "add", "path": "/port", "value": 8080},
+    {"op": "add", "path": "/retries", "value": 3},
+]
+```
 
+**`.py` files with a `migrate` function** offer full flexibility:
+
+`myapp/migrations/2_merge_name.py`
+```python
 def migrate(data: dict) -> dict:
-    if "use_foo" in data:
-        data["foo_enabled"] = data.pop("use_foo")
+    first = data.pop("first_name", "")
+    last = data.pop("last_name", "")
+    if first or last:
+        data["full_name"] = f"{first} {last}".strip()
     return data
 ```
 
+If a `.py` file defines both `migrate` and `patch`, the `migrate` function takes precedence.
+
+Point `migrations_dir` at the directory to load them:
+
 ```python
 from pathlib import Path
-from fluxconf import ConfigIO
+from fluxconf import ConfigIO, VersionedBaseModel
 
 class AppConfigIO(ConfigIO[AppConfig]):
     file_name = "app.yml"
@@ -110,57 +161,16 @@ class AppConfigIO(ConfigIO[AppConfig]):
     migrations_dir = Path(__file__).parent / "migrations"
 ```
 
-Only `.py` files with an integer prefix are loaded. Files starting with `_` or without an integer prefix are silently skipped, so helper modules can live alongside migration files.
-
 `migrations` and `migrations_dir` can be used together — fluxconf merges them, raising `ValueError` on key collisions.
 
-#### JSON Patch migrations
+### Error handling
 
-For simple, declarative transformations (field renames, additions, removals) you can use [JSON Patch (RFC 6902)](https://datatracker.ietf.org/doc/html/rfc6902) operations instead of writing a Python function. A migration value can be either a callable or a list of patch operations — both types execute in version-prefix order.
+**`MigrationError`** is raised when a migration function or patch fails. It carries two attributes:
 
-**Inline JSON Patch:**
+- `last_successful_migration` — the version of the last migration that completed successfully (or the stored version if none succeeded)
+- `original_error` — the underlying exception
 
-```python
-class AppConfigIO(ConfigIO[AppConfig]):
-    file_name = "app.yml"
-    config_type = AppConfig
-    migrations = {
-        "1_rename_host": [
-            {"op": "move", "from": "/old_host", "path": "/host"},
-            {"op": "add", "path": "/port", "value": 8080},
-        ],
-        "2_cleanup": migrate_to_v2,  # regular function — both types can be mixed freely
-    }
-```
-
-**Directory-based `.json` file:**
-
-```
-myapp/migrations/
-    1_rename_host.json
-    2_cleanup.py
-```
-
-```json
-// myapp/migrations/1_rename_host.json
-[
-    {"op": "move", "from": "/old_host", "path": "/host"},
-    {"op": "add", "path": "/port", "value": 8080}
-]
-```
-
-**`.py` file with `patch` attribute** (alternative to `migrate` function):
-
-```python
-# myapp/migrations/1_rename_host.py
-
-patch = [
-    {"op": "move", "from": "/old_host", "path": "/host"},
-    {"op": "add", "path": "/port", "value": 8080},
-]
-```
-
-If a `.py` file defines both `migrate` and `patch`, the `migrate` function takes precedence.
+**`ValueError`** is raised when the stored version is ahead of the latest known migration. This typically means the config file was written by a newer version of the software than the one currently running.
 
 ## License
 
