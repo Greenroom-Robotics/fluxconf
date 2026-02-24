@@ -7,9 +7,15 @@ from typing import Any, ClassVar, Generic, TypeVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from fluxconf.migration import Migrations, load_migrations_from_dir, run_migrations
+from fluxconf.migration import (
+    Migrations,
+    VersionedBaseModel,
+    _migration_prefix,
+    load_migrations_from_dir,
+    run_migrations,
+)
 from fluxconf.pydantic_helpers import add_literal_fields_to_dict, add_persistent_fields_to_dict
-from fluxconf.yaml_helpers import config_dict_to_yaml
+from fluxconf.yaml_helpers import YamlDumper, config_dict_to_yaml
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -52,6 +58,13 @@ class ConfigIO(Generic[T]):
         """
         return self.config_type(**(config or {}))  # type: ignore[no-any-return]
 
+    def _latest_version(self) -> int:
+        """Return the highest migration version, or 0 if there are no migrations."""
+        effective = self._effective_migrations()
+        if not effective:
+            return 0
+        return max(_migration_prefix(k) for k in effective)
+
     def _effective_migrations(self) -> Migrations:
         """Return merged migrations from inline dict and migrations_dir."""
         effective: Migrations = dict(self.migrations)
@@ -87,6 +100,11 @@ class ConfigIO(Generic[T]):
 
     def write(self, config: T, include_defaults: bool = False) -> None:
         """Serialise *config* and write it to disk as YAML."""
+        if isinstance(config, VersionedBaseModel):
+            latest = self._latest_version()
+            if config.version < latest:
+                config.version = latest
+
         path = self.get_path()
         os.makedirs(path.parent, exist_ok=True)
 
@@ -103,6 +121,11 @@ class ConfigIO(Generic[T]):
         data = config_dict_to_yaml(config_dict, schema_url=self.schema_url or None)
         with open(path, "w") as stream:
             stream.write(data)
+
+    def serialise(self, config: T) -> str:
+        """Serialise *config* to a YAML string without writing to disk."""
+        config_dict: dict[str, Any] = config.model_dump(mode="json")
+        return yaml.dump(config_dict, Dumper=YamlDumper, sort_keys=True)
 
     # -- Low-level helpers ---------------------------------------------------
 
