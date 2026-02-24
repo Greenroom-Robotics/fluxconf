@@ -1,5 +1,8 @@
 from fluxconf.config_io import ConfigIO
 from fluxconf.migration import (
+    JsonPatch,
+    JsonPatchOp,
+    Migration,
     MigrationError,
     MigrationFn,
     Migrations,

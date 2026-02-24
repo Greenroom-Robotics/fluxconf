@@ -1,6 +1,6 @@
 [project]
 name = "fluxconf"
-version = "0.0.1"
+version = "0.0.2"
 description = "File-backed pydantic configuration with migration support"
 authors = [{ name = "David Revay", email = "david.revay@greenroomrobotics.com" }]
 license = { file = "LICENSE" }
@@ -9,6 +9,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.12.3",
     "pyyaml>=6.0",
+    "jsonpatch>=1.33",
 ]
 
 classifiers = [

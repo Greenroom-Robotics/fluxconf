@@ -114,6 +114,54 @@ Only `.py` files with an integer prefix are loaded. Files starting with `_` or w
 
 `migrations` and `migrations_dir` can be used together — fluxconf merges them, raising `ValueError` on key collisions.
 
+#### JSON Patch migrations
+
+For simple, declarative transformations (field renames, additions, removals) you can use [JSON Patch (RFC 6902)](https://datatracker.ietf.org/doc/html/rfc6902) operations instead of writing a Python function. A migration value can be either a callable or a list of patch operations — both types execute in version-prefix order.
+
+**Inline JSON Patch:**
+
+```python
+class AppConfigIO(ConfigIO[AppConfig]):
+    file_name = "app.yml"
+    config_type = AppConfig
+    migrations = {
+        "1_rename_host": [
+            {"op": "move", "from": "/old_host", "path": "/host"},
+            {"op": "add", "path": "/port", "value": 8080},
+        ],
+        "2_cleanup": migrate_to_v2,  # regular function — both types can be mixed freely
+    }
+```
+
+**Directory-based `.json` file:**
+
+```
+myapp/migrations/
+    1_rename_host.json
+    2_cleanup.py
+```
+
+```json
+// myapp/migrations/1_rename_host.json
+[
+    {"op": "move", "from": "/old_host", "path": "/host"},
+    {"op": "add", "path": "/port", "value": 8080}
+]
+```
+
+**`.py` file with `patch` attribute** (alternative to `migrate` function):
+
+```python
+# myapp/migrations/1_rename_host.py
+
+patch = [
+    {"op": "move", "from": "/old_host", "path": "/host"},
+    {"op": "add", "path": "/port", "value": 8080},
+]
+```
+
+If a `.py` file defines both `migrate` and `patch`, the `migrate` function takes precedence.
+
 ## License
 
 [MIT License](https://github.com/Greenroom-Robotics/fluxconf/blob/master/LICENSE)
