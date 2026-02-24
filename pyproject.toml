@@ -1,0 +1,193 @@
+[project]
+name = "fluxconf"
+version = "0.0.1"
+description = "File-backed pydantic configuration with migration support"
+authors = [{ name = "David Revay", email = "david.revay@greenroomrobotics.com" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "packaging",
+    "pydantic>=2.12.3",
+    "pyyaml>=6.0",
+]
+
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Typing :: Typed",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: File Formats",
+    "Framework :: Pydantic :: 2",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+keywords = [
+    "fluxconf",
+    "config",
+    "config-io",
+    "migration",
+    "pydantic",
+    "pydantic-config",
+    "yaml-configuration",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "coverage"]
+dev = ["pytest", "coverage", "ruff", "pre-commit", "mypy", "codespell", "types-PyYAML"]
+
+[project.urls]
+Repository = "https://github.com/Greenroom-Robotics/fluxconf"
+Issues = "https://github.com/Greenroom-Robotics/fluxconf/issues"
+Homepage = "https://github.com/Greenroom-Robotics/fluxconf"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.envs.test]
+features = ["test"]
+installer = "uv"
+
+[[tool.hatch.envs.test.matrix]]
+python = ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+[tool.hatch.envs.test.scripts]
+test = "pytest {args}"
+cov = "coverage run -m pytest {args}"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fluxconf"]
+
+[tool.coverage.run]
+source = ["fluxconf"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    'pragma: no cover',
+    'raise NotImplementedError',
+    'if TYPE_CHECKING:',
+    'if typing.TYPE_CHECKING:',
+]
+omit = ["tests/*", "tests/**"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["fluxconf"]
+exclude = ["^tests/"]
+
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+disallow_any_generics = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+strict_equality = true
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "F",       # Pyflakes
+    "E",       # Pycodestyle (Error)
+    'I',       # isort
+    'D',       # pydocstyle
+    'D212',    # pydocstyle
+    'UP',      # pyupgrade
+    'YTT',     # flake8-2020
+    'B',       # flake8-bugbear
+    "PLE",     # pylint
+    'PYI006',
+    'PYI019',
+    'PYI024',
+    'PYI030',
+    'PYI062',
+    'PYI063',
+    'PYI066',
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "RUF005",
+    "RUF006",
+    "RUF012",
+    "RUF013",
+    "RUF016",
+    "RUF017",
+    "RUF018",
+    "RUF019",
+    "RUF020",
+    "RUF021",
+    "RUF024",
+    "RUF026",
+    "RUF030",
+    "RUF032",
+    "RUF033",
+    "RUF034",
+    "TRY002",
+    "TRY004",
+    "TRY201",
+    "TRY300",
+    "TRY301",
+    "TRY400",
+    "PERF101",
+    "RET503",
+    "LOG001",
+    "LOG002",
+]
+ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    'D105',
+    'D106',
+    'D107',
+    'D205',
+    "D213",
+    'D415',
+    'E501',
+    'B011',
+    'B028',
+    'B904',
+    'PIE804',
+    "N802",
+    "N803",
+    "N806",
+    "UP007",
+]
+exclude = ["build", "tests/**"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+    "F401", # Unused import
+    "E402", # Module import not at top of file
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+[tool.ruff.lint.isort]
+known-first-party = ["fluxconf", "tests"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.codespell]
+skip = '.git,uv.lock'
