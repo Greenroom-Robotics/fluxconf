@@ -32,17 +32,14 @@ from fluxconf import ConfigIO
 class AppConfig(BaseModel):
     name: str = "my-app"
     debug: bool = False
-    version: str = "0.0.0"
 
 class AppConfigIO(ConfigIO[AppConfig]):
     file_name = "app.yml"
     config_type = AppConfig
-    config_version = "1.0.0"
-    always_include_fields = ["version"]
 
 # Write
 io = AppConfigIO("~/.config/my-app")
-io.write(AppConfig(name="my-app", debug=True, version="1.0.0"))
+io.write(AppConfig(name="my-app", debug=True))
 
 # Read
 config = io.read()
@@ -50,12 +47,18 @@ config = io.read()
 
 ### Migrations
 
-Define migration functions keyed by the version they migrate **to**. Migrations run automatically on `read()` when the stored version is behind `config_version`.
+Define migration functions keyed by the integer version they migrate **to**. Migrations run automatically on `read()` when the stored version is behind the latest known migration.
+
+Inherit from `VersionedBaseModel` instead of Pydantic's `BaseModel` so that the `version` field is preserved when the config is written back to disk via `write()`:
 
 ```python
-from fluxconf import ConfigIO, run_migrations
+from fluxconf import ConfigIO, VersionedBaseModel
 
-def migrate_to_1_1_0(data: dict) -> dict:
+class AppConfig(VersionedBaseModel):
+    name: str = "my-app"
+    debug: bool = False
+
+def migrate_to_v2(data: dict) -> dict:
     """Rename 'use_foo' → 'foo_enabled'."""
     if "use_foo" in data:
         data["foo_enabled"] = data.pop("use_foo")
@@ -64,16 +67,52 @@ def migrate_to_1_1_0(data: dict) -> dict:
 class AppConfigIO(ConfigIO[AppConfig]):
     file_name = "app.yml"
     config_type = AppConfig
-    config_version = "1.1.0"
-    always_include_fields = ["version"]
     migrations = {
-        "1.1.0": migrate_to_1_1_0,
+        "2_rename_foo": migrate_to_v2,
     }
 ```
 
-When `io.read()` encounters a file at version `1.0.0`, it runs `migrate_to_1_1_0`, writes the migrated data back to disk, and returns the parsed model.
+Migration keys are strings of the form `"N_description"` — the integer prefix determines ordering and is stored in the config file as `version`.
 
-If a migration fails, a `MigrationError` is raised with the `last_successful_version` so you can inspect what went wrong.
+On `read()`, pending migrations are applied in version order, the result is written back to disk, and the parsed model is returned.
+
+If a migration fails, `MigrationError` is raised with `last_successful_migration` (an `int`). If the stored version is **ahead** of all known migrations, a `ValueError` is raised immediately.
+
+#### Directory-based migrations
+
+For larger migration sets, point `migrations_dir` at a directory of individual `N_description.py` files instead of (or in addition to) the inline `migrations` dict:
+
+```
+myapp/migrations/
+    1_rename_foo.py
+    2_add_bar.py
+    _helpers.py          # skipped (starts with _)
+```
+
+Each file must define a top-level `migrate(data: dict) -> dict` function:
+
+```python
+# myapp/migrations/1_rename_foo.py
+
+def migrate(data: dict) -> dict:
+    if "use_foo" in data:
+        data["foo_enabled"] = data.pop("use_foo")
+    return data
+```
+
+```python
+from pathlib import Path
+from fluxconf import ConfigIO
+
+class AppConfigIO(ConfigIO[AppConfig]):
+    file_name = "app.yml"
+    config_type = AppConfig
+    migrations_dir = Path(__file__).parent / "migrations"
+```
+
+Only `.py` files with an integer prefix are loaded. Files starting with `_` or without an integer prefix are silently skipped, so helper modules can live alongside migration files.
+
+`migrations` and `migrations_dir` can be used together — fluxconf merges them, raising `ValueError` on key collisions.
 
 ## License
 

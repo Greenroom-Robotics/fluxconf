@@ -78,4 +78,6 @@ We follow the [Google docstring format](https://sphinxcontrib-napoleon.readthedo
 
 ## Release Process
 
-New versions are automatically published to [PyPI](https://pypi.org/project/fluxconf/) when a GitHub release is created.
+1. Bump `version` in `pyproject.toml`
+2. Commit and push to `main`
+3. Create a GitHub Release (any tag) — this triggers the publish workflow, which builds the package and uploads it to [PyPI](https://pypi.org/project/fluxconf/) using the `PYPI_API_TOKEN` secret

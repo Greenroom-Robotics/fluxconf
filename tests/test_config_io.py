@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, Field
 
-from fluxconf.config_io import ConfigIO
+from fluxconf import ConfigIO, VersionedBaseModel
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,6 @@ class PetOwnerConfig(BaseModel):
 class SimpleConfigIO(ConfigIO[SimpleConfig]):
     file_name = "simple.yml"
     config_type = SimpleConfig
-    config_version = "1.0.0"
     always_include_fields = ["version"]
 
 
@@ -73,14 +72,17 @@ class SchemaConfigIO(ConfigIO[SimpleConfig]):
     schema_url = "https://example.com/schema.json"
 
 
-class MigratingConfigIO(ConfigIO[SimpleConfig]):
+class MigratingConfig(VersionedBaseModel):
+    name: str = "default"
+    enabled: bool = True
+
+
+class MigratingConfigIO(ConfigIO[MigratingConfig]):
     file_name = "migrating.yml"
-    config_type = SimpleConfig
-    config_version = "1.1.0"
-    always_include_fields = ["version"]
+    config_type = MigratingConfig
     migrations = {
-        "1.0.0": lambda data: {**data, "name": data.get("name", "default")},
-        "1.1.0": lambda data: {
+        "1_ensure_name": lambda data: {**data, "name": data.get("name", "default")},
+        "2_rename_active": lambda data: {
             k: v
             for k, v in {**data, "enabled": data.get("active", data.get("enabled", True))}.items()
             if k != "active"
@@ -165,19 +167,19 @@ class TestReadWriteRoundTrip:
 
 class TestMigrationOnRead:
     def test_migration_applied_on_read(self, config_dir):
-        """Old config with 'active' field gets migrated to 'enabled'."""
+        """Legacy config with 'active' field gets migrated to 'enabled'."""
         io = MigratingConfigIO(config_dir)
         path = io.get_path()
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write an "old" config at version 0.0.0 with legacy field
+        # Write a legacy config with no version and the old field name
         old_data = {"name": "test", "active": False}
         with open(path, "w") as f:
             yaml.dump(old_data, f)
 
         config = io.read()
         assert config.enabled is False
-        assert config.version == "1.1.0"
+        assert config.version == 2  # migrated to latest
 
         # File should have been written back with migrated data
         raw = io._read_raw()
@@ -190,7 +192,7 @@ class TestMigrationOnRead:
         path = io.get_path()
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        current_data = {"name": "test", "enabled": True, "version": "1.1.0"}
+        current_data = {"name": "test", "enabled": True, "version": 2}
         with open(path, "w") as f:
             yaml.dump(current_data, f)
 

@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from fluxconf.migration import Migrations, run_migrations
+from fluxconf.migration import Migrations, load_migrations_from_dir, run_migrations
 from fluxconf.pydantic_helpers import add_literal_fields_to_dict, add_persistent_fields_to_dict
 from fluxconf.yaml_helpers import config_dict_to_yaml
 
@@ -24,16 +24,15 @@ class ConfigIO(Generic[T]):
         class LookoutConfigIO(ConfigIO[LookoutConfig]):
             file_name = "lookout.yml"
             config_type = LookoutConfig
-            config_version = "1.1.0"
-            migrations = {"1.1.0": migrate_to_1_1_0}
+            migrations_dir = Path(__file__).parent / "migrations"
     """
 
     file_name: ClassVar[str]
     config_type: ClassVar[type]
 
     schema_url: ClassVar[str] = ""
-    config_version: ClassVar[str] = "0.0.0"
     migrations: ClassVar[Migrations] = {}
+    migrations_dir: ClassVar[Path | str | None] = None
     always_include_fields: ClassVar[list[str]] = []
 
     def __init__(self, config_directory: str | Path) -> None:
@@ -53,15 +52,29 @@ class ConfigIO(Generic[T]):
         """
         return self.config_type(**(config or {}))  # type: ignore[no-any-return]
 
+    def _effective_migrations(self) -> Migrations:
+        """Return merged migrations from inline dict and migrations_dir."""
+        effective: Migrations = dict(self.migrations)
+        if self.migrations_dir is not None:
+            dir_migrations = load_migrations_from_dir(self.migrations_dir)
+            collisions = effective.keys() & dir_migrations.keys()
+            if collisions:
+                raise ValueError(
+                    f"Migration key collision between inline migrations and "
+                    f"migrations_dir: {sorted(collisions)}"
+                )
+            effective.update(dir_migrations)
+        return effective
+
     def read(self) -> T:
         """Read the config file, run any pending migrations, and return the parsed model.
 
         If migrations are applied the file is written back to disk with the updated data.
         """
         raw = self._read_raw()
-
-        if self.migrations and self.config_version != "0.0.0":
-            migrated = run_migrations(raw, self.migrations, self.config_version)
+        effective = self._effective_migrations()
+        if effective:
+            migrated = run_migrations(raw, effective)
             if migrated != raw:
                 self._write_raw(migrated)
                 raw = migrated

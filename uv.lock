@@ -172,7 +172,6 @@ name = "fluxconf"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -198,7 +197,6 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'dev'" },
     { name = "coverage", marker = "extra == 'test'" },
     { name = "mypy", marker = "extra == 'dev'" },
-    { name = "packaging" },
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2.12.3" },
     { name = "pytest", marker = "extra == 'dev'" },
