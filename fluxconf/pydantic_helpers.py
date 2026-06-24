@@ -36,9 +36,15 @@ def add_literal_fields_to_dict(obj: Any, data: dict[str, Any]) -> None:
 
         # Nested BaseModel fields
         elif hasattr(field_value, "__class__") and hasattr(field_value.__class__, "model_fields"):
-            if field_name not in data:
-                data[field_name] = {}
-            add_literal_fields_to_dict(field_value, data[field_name])
+            # Descend to restore any Literal/discriminator fields nested deeper.
+            # We may need to create the dict to recurse into, but if the recursion
+            # adds nothing we must not leave an empty ``{}`` artifact behind for a
+            # field that ``exclude_defaults`` had correctly omitted.
+            created = field_name not in data
+            child = data.setdefault(field_name, {})
+            add_literal_fields_to_dict(field_value, child)
+            if created and not child:
+                del data[field_name]
 
 
 def add_persistent_fields_to_dict(obj: Any, data: dict[str, Any], field_names: list[str]) -> None:
