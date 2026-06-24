@@ -95,6 +95,24 @@ class PetConfigIO(ConfigIO[PetOwnerConfig]):
     config_type = PetOwnerConfig
 
 
+class PlainNested(BaseModel):
+    """A nested model with no Literal/discriminator fields."""
+
+    host: str = "localhost"
+    port: int = 8080
+
+
+class BridgeConfig(BaseModel):
+    name: str = "bridge"
+    plain: PlainNested = Field(default_factory=PlainNested)
+    version: str = "0.0.0"
+
+
+class BridgeConfigIO(ConfigIO[BridgeConfig]):
+    file_name = "bridge.yml"
+    config_type = BridgeConfig
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -262,6 +280,23 @@ class TestLiteralFieldRestoration:
         loaded = io.read()
         assert isinstance(loaded.pet, CatConfig)
         assert loaded.pet.indoor is False
+
+    def test_all_default_plain_nested_not_written_as_empty_dict(self, config_dir):
+        """Regression: an all-default nested model with no Literal/discriminator
+        fields must not be re-inserted as an empty ``{}`` after exclude_defaults."""
+        io = BridgeConfigIO(config_dir)
+        io.write(BridgeConfig(name="custom", version="1.0.0"))
+
+        raw = io._read_raw()
+        assert raw["name"] == "custom"
+        assert "plain" not in raw  # no empty {} artifact
+
+    def test_default_plain_nested_round_trips(self, config_dir):
+        io = BridgeConfigIO(config_dir)
+        io.write(BridgeConfig(name="custom", version="1.0.0"))
+
+        loaded = io.read()
+        assert loaded.plain == PlainNested()  # defaults reconstructed correctly
 
 
 # ---------------------------------------------------------------------------
