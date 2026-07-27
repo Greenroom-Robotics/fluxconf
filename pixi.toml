@@ -17,7 +17,7 @@ authors = ["Greenroom Robotics <team@greenroomrobotics.com>"]
 
 [package.build.backend]
 name = "pixi-build-python"
-version = "*"
+version = ">=0.8,<0.9"
 channels = [
   "https://prefix.dev/pixi-build-backends",
   "https://prefix.dev/conda-forge",
