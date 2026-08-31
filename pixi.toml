@@ -9,7 +9,6 @@ fluxconf = { path = "." }
 
 [package]
 name = "fluxconf"
-# Unified with the PyPI version; release tooling owns the real number.
 version     = "0.0.5"
 description = "File-backed pydantic configuration with migration support"
 license     = "MIT"
