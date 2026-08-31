@@ -1,0 +1,50 @@
+name: Release
+on:
+  workflow_dispatch:
+concurrency: release
+jobs:
+  pixi:
+    name: Release pixi package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: greenroom-robotics/mise/.github/actions/release@v8
+        with:
+          package: fluxconf
+          package-dir: .
+          gh-app-client-id: ${{ secrets.GH_APP_CLIENT_ID }}
+          gh-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  pypi:
+    name: Upload Python Package
+    needs: pixi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Build and publish latest release tag
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          TAG="$(git tag -l 'fluxconf@*' --sort=-v:refname | head -1)"
+          [ -n "$TAG" ] || { echo "no fluxconf@* tag yet; nothing to publish"; exit 0; }
+          git checkout "$TAG"
+          uv version "${TAG#fluxconf@}"
+          uv build
+          uv run --with twine twine upload --skip-existing dist/*
