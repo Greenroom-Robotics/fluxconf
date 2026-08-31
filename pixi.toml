@@ -1,8 +1,8 @@
 [workspace]
-name = "fluxconf"
-channels = ["http://localhost:12222/general", "https://prefix.dev/conda-forge"]
+name      = "fluxconf"
+channels  = ["az://stgrcondachannel.blob.core.windows.net/general", "https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
-preview = ["pixi-build"]
+preview   = ["pixi-build"]
 
 [dependencies]
 fluxconf = { path = "." }
@@ -10,28 +10,25 @@ fluxconf = { path = "." }
 [package]
 name = "fluxconf"
 # Unified with the PyPI version; release tooling owns the real number.
-version = "0.0.5"
+version     = "0.0.5"
 description = "File-backed pydantic configuration with migration support"
-license = "MIT"
-authors = ["Greenroom Robotics <team@greenroomrobotics.com>"]
+license     = "MIT"
+authors     = ["Greenroom Robotics <team@greenroomrobotics.com>"]
 
 [package.build.backend]
-name = "pixi-build-python"
-version = ">=0.8,<0.9"
-channels = [
-  "https://prefix.dev/pixi-build-backends",
-  "https://prefix.dev/conda-forge",
-]
+name     = "pixi-build-python"
+version  = ">=0.8,<0.9"
+channels = ["https://prefix.dev/pixi-build-backends", "https://prefix.dev/conda-forge"]
 
 [package.build.config]
 noarch = true
 
 [package.host-dependencies]
-python = "*"
+python    = "*"
 hatchling = "*"
 
 [package.run-dependencies]
-python = ">=3.10"
-pydantic = ">=2.0"
-pyyaml = ">=6.0"
+python    = ">=3.10"
+pydantic  = ">=2.0"
+pyyaml    = ">=6.0"
 jsonpatch = ">=1.33"

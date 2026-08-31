@@ -132,3 +132,4 @@ dmypy.json
 
 *example*.py
 *ruff_cache*
+.pixi/
